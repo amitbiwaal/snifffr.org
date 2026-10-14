@@ -1,5 +1,8 @@
 import { expect, test, type Page } from '@playwright/test'
 
+// Set E2E_EXPECT_NOINDEX=1 when testing a deployment that runs with SITE_NOINDEX=true.
+const EXPECT_NOINDEX = process.env.E2E_EXPECT_NOINDEX === '1'
+
 const PAGES = [
   '/',
   '/about',
@@ -39,7 +42,8 @@ for (const path of PAGES) {
     expect(new URL(canonical!).pathname).toBe(path)
     await expect(page.locator('meta[property="og:image"]')).toHaveCount(1)
     await expect(page.locator('meta[name="twitter:card"]')).toHaveAttribute('content', 'summary_large_image')
-    await expect(page.locator('meta[name="robots"]')).not.toHaveAttribute('content', /noindex/)
+    if (EXPECT_NOINDEX) await expect(page.locator('meta[name="robots"]')).toHaveAttribute('content', /noindex/)
+    else await expect(page.locator('meta[name="robots"]')).not.toHaveAttribute('content', /noindex/)
 
     // Structured data is valid JSON and always includes the organisation.
     const types = (await jsonLd(page)).map((d) => d['@type'])
@@ -100,7 +104,12 @@ test('technical SEO endpoints', async ({ request, isMobile }) => {
   test.skip(isMobile, 'viewport-independent')
   const robots = await request.get('/robots.txt')
   expect(robots.status()).toBe(200)
-  expect(await robots.text()).toMatch(/Sitemap: https:\/\/.+\/sitemap\.xml/)
+  if (EXPECT_NOINDEX) {
+    const home = await request.get('/')
+    expect(home.headers()['x-robots-tag']).toContain('noindex')
+  } else {
+    expect(await robots.text()).toMatch(/Sitemap: https:\/\/.+\/sitemap\.xml/)
+  }
 
   const sitemap = await request.get('/sitemap.xml')
   expect(sitemap.status()).toBe(200)

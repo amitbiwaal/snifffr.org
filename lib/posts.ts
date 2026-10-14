@@ -4,13 +4,17 @@ import path from 'node:path'
 import { randomUUID } from 'node:crypto'
 import { cache } from 'react'
 import { z } from 'zod'
+import { deleteDoc, hasBlobData, listDocs, putDoc } from './blob-data'
+import { getDb, hasDatabase } from './db'
 import { sanitizePostHtml } from './html'
 import { slugify, stripHtml, truncate } from './text'
 import { site } from './site'
 
 /**
- * Posts are stored as one JSON file per post in /content/posts.
- * No database needed: works on any Node host with a persistent disk (VPS, Docker, etc.).
+ * Storage, in order of preference:
+ *  1. Turso (libSQL) when TURSO_DATABASE_URL is set,
+ *  2. a private Vercel Blob store when DATA_BLOB_READ_WRITE_TOKEN is set,
+ *  3. one JSON file per post in /content/posts (local development / hosts with a persistent disk).
  */
 export const CONTENT_DIR = process.env.CONTENT_DIR
   ? path.resolve(process.env.CONTENT_DIR)
@@ -92,27 +96,61 @@ function fileFor(id: string) {
   return path.join(POSTS_DIR, `${id}.json`)
 }
 
-async function readAllFromDisk(): Promise<Post[]> {
+async function readRawPosts(): Promise<{ source: string; raw: unknown }[]> {
+  if (hasDatabase()) {
+    const db = await getDb()
+    const rs = await db.execute('SELECT id, data FROM posts')
+    return rs.rows.map((row) => ({ source: `db:${row.id}`, raw: JSON.parse(String(row.data)) }))
+  }
+  if (hasBlobData()) {
+    return (await listDocs('posts')).map((d) => ({ source: `blob:${d.id}`, raw: d.data }))
+  }
   await ensureDir()
   const files = (await fs.readdir(POSTS_DIR)).filter((f) => f.endsWith('.json'))
-  const posts = await Promise.all(
-    files.map(async (file) => {
-      try {
-        const raw = JSON.parse(await fs.readFile(path.join(POSTS_DIR, file), 'utf8'))
-        return postSchema.parse(raw)
-      } catch (err) {
-        console.error(`[posts] Skipping unreadable post file ${file}:`, err)
-        return null
-      }
-    }),
+  return Promise.all(
+    files.map(async (file) => ({ source: file, raw: JSON.parse(await fs.readFile(path.join(POSTS_DIR, file), 'utf8')) })),
   )
+}
+
+async function readAllStored(): Promise<Post[]> {
+  const posts = (await readRawPosts()).map(({ source, raw }) => {
+    const parsed = postSchema.safeParse(raw)
+    if (!parsed.success) console.error(`[posts] Skipping invalid post ${source}:`, parsed.error.message)
+    return parsed.success ? parsed.data : null
+  })
   return posts
     .filter((p): p is Post => p !== null)
     .sort((a, b) => Date.parse(b.publishedAt) - Date.parse(a.publishedAt))
 }
 
+async function writePost(post: Post) {
+  if (hasDatabase()) {
+    const db = await getDb()
+    await db.execute({
+      sql: `INSERT INTO posts (id, slug, status, published_at, updated_at, data) VALUES (?, ?, ?, ?, ?, ?)
+            ON CONFLICT(id) DO UPDATE SET slug = excluded.slug, status = excluded.status,
+              published_at = excluded.published_at, updated_at = excluded.updated_at, data = excluded.data`,
+      args: [post.id, post.slug, post.status, post.publishedAt, post.updatedAt, JSON.stringify(post)],
+    })
+    return
+  }
+  if (hasBlobData()) return putDoc('posts', post.id, post)
+  await ensureDir()
+  await writeAtomic(fileFor(post.id), `${JSON.stringify(post, null, 2)}\n`)
+}
+
+async function removePost(id: string) {
+  if (hasDatabase()) {
+    const db = await getDb()
+    await db.execute({ sql: 'DELETE FROM posts WHERE id = ?', args: [id] })
+    return
+  }
+  if (hasBlobData()) return deleteDoc('posts', id)
+  await fs.rm(fileFor(id), { force: true })
+}
+
 /** Every post, drafts included (admin use). Deduplicated per request. */
-export const getAllPosts = cache(readAllFromDisk)
+export const getAllPosts = cache(readAllStored)
 
 export function isLive(post: Post, now = Date.now()) {
   return post.status === 'published' && Date.parse(post.publishedAt) <= now
@@ -204,10 +242,9 @@ export async function savePost(input: PostInput): Promise<Post> {
     throw new PostValidationError(fieldErrors)
   }
   const data = parsed.data
-  await ensureDir()
 
-  // Read straight from disk: React's per-request cache could be stale inside a mutation.
-  const all = await readAllFromDisk()
+  // Read straight from storage: React's per-request cache could be stale inside a mutation.
+  const all = await readAllStored()
   const existing = data.id ? all.find((p) => p.id === data.id) : undefined
   if (data.id && !existing) throw new PostValidationError({ form: 'This post no longer exists.' })
 
@@ -252,14 +289,14 @@ export async function savePost(input: PostInput): Promise<Post> {
     seo: data.seo,
   })
 
-  await writeAtomic(fileFor(post.id), `${JSON.stringify(post, null, 2)}\n`)
+  await writePost(post)
   return post
 }
 
 export async function deletePost(id: string) {
-  const all = await readAllFromDisk()
+  const all = await readAllStored()
   const post = all.find((p) => p.id === id)
   if (!post) return null
-  await fs.rm(fileFor(id), { force: true })
+  await removePost(id)
   return post
 }

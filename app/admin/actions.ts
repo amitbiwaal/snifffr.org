@@ -44,7 +44,7 @@ function revalidatePublicSite(slugs: string[]) {
     revalidatePath(`/blog/${slug}`)
     revalidatePath(`/og/${slug}`)
   }
-  revalidatePath('/sitemap.xml')
+  revalidatePath('/sitemap-xml') // destination of the /sitemap.xml rewrite
   revalidatePath('/feed.xml')
   revalidatePath('/llms.txt')
 }

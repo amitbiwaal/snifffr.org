@@ -29,15 +29,29 @@ function getBrandMark() {
   return brandMark
 }
 
-/** Loads an uploaded cover as a JPEG data URL (Satori cannot decode WebP). */
+const BLOB_HOST = /^[a-z0-9-]+\.public\.blob\.vercel-storage\.com$/i
+
+/** Reads an uploaded cover (local file or Vercel Blob URL). Only our own storage is fetched. */
+async function readCover(src: string): Promise<Buffer | null> {
+  if (src.startsWith('/uploads/')) {
+    const root = path.resolve(CONTENT_DIR, 'uploads')
+    const file = path.resolve(root, src.replace(/^\/uploads\//, ''))
+    if (!file.startsWith(root + path.sep)) return null
+    return fs.readFile(file)
+  }
+  const url = new URL(src)
+  if (url.protocol !== 'https:' || !BLOB_HOST.test(url.hostname)) return null
+  const res = await fetch(url, { signal: AbortSignal.timeout(8000) })
+  return res.ok ? Buffer.from(await res.arrayBuffer()) : null
+}
+
+/** Loads a cover as a JPEG data URL (Satori cannot decode WebP). */
 async function loadCover(src: string) {
-  if (!src.startsWith('/uploads/')) return null
-  const rel = src.replace(/^\/uploads\//, '')
-  const file = path.resolve(CONTENT_DIR, 'uploads', rel)
-  if (!file.startsWith(path.resolve(CONTENT_DIR, 'uploads'))) return null
   try {
-    // Read into memory first: given a path, libvips keeps the file open (and locked on Windows).
-    const jpg = await sharp(await fs.readFile(file)).resize(1200, 630, { fit: 'cover' }).jpeg({ quality: 80 }).toBuffer()
+    const buf = await readCover(src)
+    if (!buf) return null
+    // Pass a buffer, not a path: given a path, libvips keeps the file open (and locked on Windows).
+    const jpg = await sharp(buf).resize(1200, 630, { fit: 'cover' }).jpeg({ quality: 80 }).toBuffer()
     return `data:image/jpeg;base64,${jpg.toString('base64')}`
   } catch {
     return null

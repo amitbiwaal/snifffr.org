@@ -5,7 +5,8 @@ import { PageHero } from '@/components/PageHero'
 import { getCategories, getPublishedPosts } from '@/lib/posts'
 import { collectionPageJsonLd, pageMetadata } from '@/lib/seo'
 
-export const revalidate = 3600
+// Short window: bounds staleness if a render races a CMS save (saves also revalidate instantly).
+export const revalidate = 600
 
 export const metadata = pageMetadata({
   title: 'Blog: Guides to Selling Feet Pics Online Safely',

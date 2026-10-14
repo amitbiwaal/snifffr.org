@@ -5,6 +5,7 @@ import StarterKit from '@tiptap/starter-kit'
 import ImageExt from '@tiptap/extension-image'
 import TextAlign from '@tiptap/extension-text-align'
 import { CharacterCount, Placeholder } from '@tiptap/extensions'
+import { TextSelection } from '@tiptap/pm/state'
 import { useRef, useState } from 'react'
 import { uploadImage } from './upload'
 
@@ -209,6 +210,7 @@ function LinkPanel({ editor, onClose }: { editor: Editor; onClose: () => void })
         .chain()
         .focus()
         .insertContent({ type: 'text', text: url, marks: [{ type: 'link', attrs: { href: url, target: newTab ? '_blank' : null, rel: rel || null } }] })
+        .unsetMark('link')
         .run()
     } else {
       editor
@@ -216,6 +218,13 @@ function LinkPanel({ editor, onClose }: { editor: Editor; onClose: () => void })
         .focus()
         .extendMarkRange('link')
         .setLink({ href: url, target: newTab ? '_blank' : null, rel: rel || null })
+        // Put the cursor after the link (and stop the link mark) so further typing
+        // neither overwrites the linked text nor extends the link.
+        .command(({ tr }) => {
+          tr.setSelection(TextSelection.create(tr.doc, tr.selection.to))
+          return true
+        })
+        .unsetMark('link')
         .run()
     }
     onClose()

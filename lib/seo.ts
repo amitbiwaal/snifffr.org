@@ -60,7 +60,7 @@ export function organizationJsonLd() {
     logo: { '@type': 'ImageObject', url: absoluteUrl('/icon-512.png'), width: 512, height: 512 },
     description:
       'Snifffr is a trusted feet pics marketplace where creators can sell feet pics online safely and buyers can purchase feet pictures anonymously.',
-    sameAs: [...site.brandSameAs],
+    sameAs: site.brandSameAs.filter((u) => u.replace(/\/$/, '') !== site.url),
   }
 }
 

@@ -3,6 +3,8 @@ import path from 'node:path'
 import { expect, test, type Page } from '@playwright/test'
 import sharp from 'sharp'
 
+// Local uploads (/uploads/...) or Vercel Blob URLs, always re-encoded to WebP.
+const UPLOAD_URL = /^(\/uploads\/|https:\/\/[a-z0-9-]+\.public\.blob\.vercel-storage\.com\/uploads\/).+\.webp$/
 const EMAIL = process.env.E2E_ADMIN_EMAIL || ''
 const PASSWORD = process.env.E2E_ADMIN_PASSWORD || ''
 
@@ -79,6 +81,7 @@ test.describe.serial('CMS', () => {
     await page.getByLabel('Link URL').fill('/safety')
     await page.getByRole('button', { name: 'Apply' }).click()
     await expect(editor.locator('a[href="/safety"]')).toHaveText('Read the safety guide')
+    await expect(editor).toBeFocused()
 
     // --- Inline image upload ---
     await page.keyboard.press('End')
@@ -89,7 +92,7 @@ test.describe.serial('CMS', () => {
       mimeType: 'image/png',
       buffer: await makeImage('Inline image', 'png'),
     })
-    await expect(page.getByLabel('Image URL')).toHaveValue(/^\/uploads\/.+\.webp$/)
+    await expect(page.getByLabel('Image URL')).toHaveValue(UPLOAD_URL)
     uploaded.push(await page.getByLabel('Image URL').inputValue())
     await page.getByLabel('Alt text', { exact: true }).fill('Orange test graphic')
     await page.getByRole('button', { name: 'Insert', exact: true }).click()
@@ -101,7 +104,7 @@ test.describe.serial('CMS', () => {
       mimeType: 'image/jpeg',
       buffer: await makeImage('Cover image', 'jpeg', EXIF_MARKER),
     })
-    await expect(page.locator('.cover-preview img')).toHaveAttribute('src', /^\/uploads\/.+\.webp$/)
+    await expect(page.locator('.cover-preview img')).toHaveAttribute('src', UPLOAD_URL)
     uploaded.push((await page.locator('.cover-preview img').getAttribute('src'))!)
 
     // --- Organise + SEO ---
@@ -126,6 +129,9 @@ test.describe.serial('CMS', () => {
     await preview.goto(`/admin/preview/${postId}`)
     await expect(preview.locator('h1')).toHaveText(title)
     await expect(preview.locator('.preview-bar')).toContainText('draft is not public yet')
+    // Let background link prefetches finish: a render started before publishing could otherwise
+    // land in the ISR cache after the publish revalidation (a stale-render race).
+    await preview.waitForLoadState('networkidle')
     await preview.close()
 
     // --- Publish ---
@@ -227,6 +233,6 @@ test.describe.serial('CMS', () => {
   // Best-effort: remove the test images when the server under test uses this checkout's content folder.
   test.afterAll(() => {
     const root = path.resolve(process.env.CONTENT_DIR || 'content', 'uploads')
-    for (const url of uploaded) rmSync(path.join(root, url.replace(/^\/uploads\//, '')), { force: true })
+    for (const url of uploaded.filter((u) => u.startsWith('/uploads/'))) rmSync(path.join(root, url.replace(/^\/uploads\//, '')), { force: true })
   })
 })

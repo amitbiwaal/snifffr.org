@@ -10,7 +10,8 @@ import { getPublishedPosts } from '@/lib/posts'
 import { faqJsonLd, pageMetadata, serviceJsonLd } from '@/lib/seo'
 import { site } from '@/lib/site'
 
-export const revalidate = 3600
+// Short window: bounds staleness if a render races a CMS save (saves also revalidate instantly).
+export const revalidate = 600
 
 export const metadata = pageMetadata({
   title: site.defaultTitle,

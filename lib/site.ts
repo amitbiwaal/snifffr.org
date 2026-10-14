@@ -1,4 +1,4 @@
-const rawUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://feetpicss.com'
+const rawUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://snifffr.org'
 
 export const site = {
   name: 'Snifffr',
@@ -10,7 +10,9 @@ export const site = {
     'Sell feet pics online with Snifffr, the anonymous feet pics marketplace. Keep your identity private, get secure payouts, and reach verified buyers. Start free.',
   tagline: 'The safe, anonymous way to sell feet pics online',
   brandSameAs: ['https://snifffr.org'],
-  contactEmail: process.env.NEXT_PUBLIC_CONTACT_EMAIL || 'hello@feetpicss.com',
+  contactEmail: process.env.NEXT_PUBLIC_CONTACT_EMAIL || 'hello@snifffr.org',
+  /** SITE_NOINDEX=true keeps the whole site out of search engines (staging / pre-launch). */
+  noindex: ['1', 'true', 'yes'].includes((process.env.SITE_NOINDEX || '').toLowerCase()),
   defaultAuthor: 'Snifffr Guide Team',
   /** Every call-to-action on the site points here. Change it in one place. */
   affiliateUrl:

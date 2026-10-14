@@ -1,0 +1,11 @@
+# Never upload local secrets or private data
+.env*
+!.env.example
+data
+# Local build/test artefacts
+.next
+node_modules
+test-results
+playwright-report
+tests
+legacy

@@ -8,11 +8,15 @@ const securityHeaders = [
   { key: 'Strict-Transport-Security', value: 'max-age=63072000; includeSubDomains' },
 ]
 
+const noindex = ['1', 'true', 'yes'].includes((process.env.SITE_NOINDEX || '').toLowerCase())
+
 const nextConfig: NextConfig = {
   poweredByHeader: false,
   reactStrictMode: true,
   images: {
     formats: ['image/avif', 'image/webp'],
+    // Images uploaded through the CMS on Vercel live in Vercel Blob.
+    remotePatterns: [{ protocol: 'https', hostname: '*.public.blob.vercel-storage.com' }],
   },
   experimental: {
     serverActions: {
@@ -22,7 +26,10 @@ const nextConfig: NextConfig = {
   },
   async headers() {
     return [
-      { source: '/:path*', headers: securityHeaders },
+      {
+        source: '/:path*',
+        headers: noindex ? [...securityHeaders, { key: 'X-Robots-Tag', value: 'noindex, nofollow' }] : securityHeaders,
+      },
       {
         // Keep the CMS and its APIs out of every search index.
         source: '/admin/:path*',
@@ -33,6 +40,9 @@ const nextConfig: NextConfig = {
         headers: [{ key: 'X-Robots-Tag', value: 'noindex, nofollow' }],
       },
     ]
+  },
+  async rewrites() {
+    return [{ source: '/sitemap.xml', destination: '/sitemap-xml' }]
   },
   async redirects() {
     return [

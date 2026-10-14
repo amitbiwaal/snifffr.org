@@ -1,5 +1,7 @@
 # Snifffr Guide: Next.js website + blog CMS
 
+Live (noindex, pre-launch): https://snifffr.org · https://snifffr-org.vercel.app
+
 The former single-page landing page (kept in `legacy/` for reference), rebuilt as a full website with
 **Next.js 16 (App Router) + React 19**, a built-in **blog CMS** with a rich-text editor, and technical SEO.
 
@@ -19,9 +21,28 @@ npm run build
 npm start                         # or: npx next start -p 3210
 ```
 
-Requires Node.js 20.9+ and a host with a **persistent disk** (VPS, Docker, Railway, Render, etc.). Blog posts and
-uploaded images are stored as files in `content/`. On a serverless host such as Vercel, the filesystem is
-read-only/ephemeral, so the CMS would need a database and object storage there instead.
+Requires Node.js 20.9+.
+
+### Storage (works locally and on serverless)
+
+The app picks a storage backend from the environment, in this order:
+
+| Data | 1st choice | 2nd choice | Fallback (local dev / VPS) |
+| --- | --- | --- | --- |
+| Posts and contact messages | **Turso** (`TURSO_DATABASE_URL`, `TURSO_AUTH_TOKEN`) | **Private Vercel Blob** store (`DATA_BLOB_READ_WRITE_TOKEN`) | JSON files in `content/posts`, `data/` |
+| Uploaded images | **Vercel Blob** (`BLOB_READ_WRITE_TOKEN`) | | `content/uploads` |
+
+### Deployment on Vercel (current setup)
+
+- Vercel project **`snifffr-org`**, production domain **snifffr.org** (`www` redirects to it).
+- Blob stores: `snifffr-media` (public, images) and `snifffr-data` (private, posts + messages), both connected to the project.
+- Env vars set on Vercel: `NEXT_PUBLIC_SITE_URL`, `SITE_NOINDEX`, `ADMIN_EMAIL`, `ADMIN_PASSWORD_HASH`, `SESSION_SECRET`,
+  `BLOB_READ_WRITE_TOKEN`, `DATA_BLOB_READ_WRITE_TOKEN`.
+- Deploy: `vercel deploy --prod` (or connect the GitHub repo in Vercel → Settings → Git for automatic deploys).
+- **Switching to Turso:** in Vercel → Storage → Create Database → Turso, connect it to `snifffr-org`
+  (this sets `TURSO_DATABASE_URL` / `TURSO_AUTH_TOKEN`), re-create posts (or copy them over), and redeploy. Turso is
+  used automatically when those variables exist.
+- **Going live for SEO:** set `SITE_NOINDEX=false` (or delete it) and redeploy.
 
 ### Environment variables (`.env.local`)
 
@@ -34,6 +55,10 @@ read-only/ephemeral, so the CMS would need a database and object storage there i
 | `NEXT_PUBLIC_AFFILIATE_URL` | Optional: overrides the "Start Selling" link (default in `lib/site.ts`) |
 | `NEXT_PUBLIC_GOOGLE_SITE_VERIFICATION`, `NEXT_PUBLIC_BING_SITE_VERIFICATION` | Optional Search Console / Bing verification codes |
 | `CONTENT_DIR`, `DATA_DIR` | Optional storage locations (default `./content`, `./data`) |
+| `TURSO_DATABASE_URL`, `TURSO_AUTH_TOKEN` | Turso database for posts + messages (optional) |
+| `DATA_BLOB_READ_WRITE_TOKEN` | Private Vercel Blob store for posts + messages (optional) |
+| `BLOB_READ_WRITE_TOKEN` | Vercel Blob store for uploaded images (optional) |
+| `SITE_NOINDEX` | `true` = noindex the whole site (meta robots + `X-Robots-Tag`), for staging / pre-launch |
 
 The login cookie is `Secure` in production, so serve the production site over HTTPS.
 
@@ -70,7 +95,8 @@ The login cookie is `Secure` in production, so serve the production site over HT
 - Per-page `<title>`, meta description, self-referencing canonical, Open Graph and Twitter cards
 - Generated 1200×630 social images: `/og` for the site, and `/og/[slug]` per post (uses the cover photo)
 - JSON-LD: Organization, WebSite (+ SearchAction), Service, FAQPage, BreadcrumbList, BlogPosting, CollectionPage
-- `sitemap.xml` (including posts, categories and images), `robots.txt`, RSS `feed.xml`, `llms.txt`, web manifest
+- `sitemap.xml` (including posts, categories and images; served from `/sitemap-xml` via a rewrite so CMS saves can
+  revalidate it on Vercel), `robots.txt`, RSS `feed.xml`, `llms.txt`, web manifest
 - `/admin`, `/api`, `/search` are blocked in robots.txt and send `X-Robots-Tag: noindex`; the 404 page is noindex
 - Affiliate links use `rel="nofollow sponsored"`
 - 301/308 redirects for old URLs (`/index.html` → `/`, etc.)
@@ -86,6 +112,9 @@ End-to-end tests (Playwright, using the locally installed Microsoft Edge):
 ```bash
 npm run build && npx next start -p 3210
 E2E_ADMIN_EMAIL=you@example.com E2E_ADMIN_PASSWORD='...' npm run test:e2e
+
+# Against the live (noindex) site:
+E2E_BASE_URL=https://snifffr-org.vercel.app E2E_EXPECT_NOINDEX=1 E2E_ADMIN_EMAIL=... E2E_ADMIN_PASSWORD=... npm run test:e2e
 ```
 
 They cover every public page on desktop and mobile (title, description, canonical, OG, JSON-LD, one H1, no

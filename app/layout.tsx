@@ -22,17 +22,19 @@ export const metadata: Metadata = {
   creator: site.siteName,
   publisher: site.siteName,
   formatDetection: { telephone: false, email: false, address: false },
-  robots: {
-    index: true,
-    follow: true,
-    googleBot: {
-      index: true,
-      follow: true,
-      'max-image-preview': 'large',
-      'max-snippet': -1,
-      'max-video-preview': -1,
-    },
-  },
+  robots: site.noindex
+    ? { index: false, follow: false, googleBot: { index: false, follow: false } }
+    : {
+        index: true,
+        follow: true,
+        googleBot: {
+          index: true,
+          follow: true,
+          'max-image-preview': 'large',
+          'max-snippet': -1,
+          'max-video-preview': -1,
+        },
+      },
   icons: {
     icon: [
       { url: '/favicon.ico', sizes: 'any' },

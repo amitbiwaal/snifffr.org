@@ -15,12 +15,14 @@
     "node": ">=20.9.0"
   },
   "dependencies": {
+    "@libsql/client": "^0.18.0",
     "@tiptap/extension-image": "^3.32.0",
     "@tiptap/extension-text-align": "^3.32.0",
     "@tiptap/extensions": "^3.32.0",
     "@tiptap/pm": "^3.32.0",
     "@tiptap/react": "^3.32.0",
     "@tiptap/starter-kit": "^3.32.0",
+    "@vercel/blob": "^2.8.2",
     "jose": "^6.2.12",
     "next": "^16.4.0",
     "react": "^19.3.0",
